@@ -1,0 +1,17 @@
+{
+  "name": "fivem-backdoor-scanner",
+  "version": "1.0.0",
+  "description": "Static scanner for FiveM resources: finds hidden loaders, remote code execution, obfuscated payloads, secret reads and leaked tokens in Lua and JS files.",
+  "type": "module",
+  "bin": { "fivem-backdoor-scanner": "bin/scan.js" },
+  "exports": "./src/rules.js",
+  "files": ["bin", "src"],
+  "scripts": { "test": "node --test" },
+  "engines": { "node": ">=18" },
+  "dependencies": { "luaparse": "0.3.1" },
+  "keywords": ["fivem", "backdoor", "scanner", "lua", "cfx", "qbcore", "esx", "security"],
+  "homepage": "https://rpscripts.net/tools/fivem-backdoor-scanner/",
+  "repository": { "type": "git", "url": "git+https://github.com/rpScripts/fivem-backdoor-scanner.git" },
+  "license": "MIT",
+  "author": "RPScripts (https://rpscripts.net)"
+}
