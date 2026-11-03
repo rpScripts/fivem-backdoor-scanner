@@ -1,23 +1,23 @@
 // The backdoor checks of the RPScripts FiveM Backdoor Scanner (https://rpscripts.net/tools/fivem-backdoor-scanner/).
 // Static only: files are parsed, never run. Codes never change meaning; same codes as the web scanner's reports.
+import { readFileSync } from "node:fs";
 import { memberPath, parseLua, stringValue, walk } from "./lua.js";
 
-export const RULESET_VERSION = "2026.10.6";
+// Rule texts live in rules/catalog.json, the same entries as the web scanner's rule catalog.
+const catalog = JSON.parse(readFileSync(new URL("../rules/catalog.json", import.meta.url), "utf8"));
+export const RULESET_VERSION = catalog.rulesetVersion;
+export const RULES = catalog.rules;
 
-const SECURITY_DOCS = "https://docs.fivem.net/docs/developers/server-security/";
+/** A finding with the rule's texts from the catalog. Codes never change meaning; retired rules keep their code unused. */
+export function finding(code, message, at = {}, extraRefs = []) {
+  const rule = RULES[code];
+  if (!rule) throw new Error(`unknown rule ${code}`);
+  return { code, ...rule, message, ...at, refs: [...rule.refs, ...extraRefs], ruleVersion: RULESET_VERSION };
+}
 
-export const RULES = {
-  "LAB-SEC-101": { severity: "warning", title: "Possible backdoor: runs code downloaded over HTTP", fix: "Code from a web response should never reach load(); this is how known FiveM backdoors take over a server. Remove it unless you wrote it and trust the server it calls." },
-  "LAB-SEC-102": { severity: "warning", title: "Runs code built from encoded or obfuscated text", fix: "Find out what the decoded text does before starting the resource; ship readable source (or Cfx escrow) instead of hidden code." },
-  "LAB-SEC-103": { severity: "warning", title: "Obfuscated data in the code", fix: "Long escaped-byte, base64 or hex strings and long string.char lists hide what the code does. Check what they decode to." },
-  "LAB-SEC-104": { severity: "warning", title: "Reads a server secret", fix: "A resource has no reason to read the license key or RCON password; database credentials only belong in the database resource. Find out where the value goes." },
-  "LAB-SEC-105": { severity: "warning", title: "HTTP request to a raw IP or a hidden address", fix: "Legitimate integrations call named, documented hosts. Find out who runs the address and what is sent there." },
-  "LAB-SEC-106": { severity: "warning", title: "Runs shell commands or writes outside its own resource", fix: "os.execute and io.popen run programs on the host; writing other resources' files is how backdoors spread. Keep file writes inside GetResourcePath(GetCurrentResourceName())." },
-  "LAB-SEC-107": { severity: "error", title: "Code hidden behind a long run of spaces", fix: "Legitimate code is never pushed out of view. This is how a known FiveM backdoor hides a loader that runs remote code on player clients: delete the hidden part and treat the package as compromised." },
-  "LAB-SEC-108": { severity: "warning", title: "Ships a credential", fix: "Someone's token, webhook or key is in the download, so every buyer gets it. Replace it with an empty value and let the server owner enter their own." },
-};
-
-const finding = (code, message, at) => ({ code, ...RULES[code], message, ...at, docs: SECURITY_DOCS, ruleVersion: RULESET_VERSION });
+const ORDER = { error: 0, warning: 1, info: 2 };
+export const sortFindings = (list) =>
+  [...list].sort((a, b) => ORDER[a.severity] - ORDER[b.severity] || (a.path ?? "").localeCompare(b.path ?? "") || (a.line ?? 0) - (b.line ?? 0));
 
 const isCall = (n) => n.type === "CallExpression" || n.type === "StringCallExpression" || n.type === "TableCallExpression";
 const argsOf = (c) => (c.type === "CallExpression" ? c.arguments : c.type === "StringCallExpression" ? [c.argument] : [c.arguments]);
