@@ -1,4 +1,7 @@
 {
+  "sec-101-alias-load.lua": [
+    "LAB-SEC-101"
+  ],
   "sec-101-http-load.lua": [
     "LAB-SEC-101"
   ],
@@ -19,5 +22,11 @@
   ],
   "sec-108-credential.lua": [
     "LAB-SEC-108"
+  ],
+  "sec-109-admin-grant.lua": [
+    "LAB-SEC-109"
+  ],
+  "sec-110-event-load.lua": [
+    "LAB-SEC-110"
   ]
 }

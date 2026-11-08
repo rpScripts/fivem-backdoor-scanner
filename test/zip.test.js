@@ -23,7 +23,7 @@ test("a server archive: every resource is read and findings carry the full path"
 
 test("JS gets the hidden-code check, Lua the loaders, and a file that doesn't parse is kept", () => {
   const report = scanFiles({ "web/app.js": `const a = 1;${" ".repeat(600)}eval(atob(x))`, "server.lua": REMOTE, "broken.lua": "function(" });
-  assert.deepEqual(report.findings.map((f) => f.code).sort(), ["LAB-SEC-101", "LAB-SEC-107"]);
+  assert.deepEqual(report.findings.map((f) => f.code).sort(), ["LAB-SEC-101", "LAB-SEC-107", "LAB-SEC-111"]);
   assert.deepEqual(report.unparsed, ["broken.lua"]);
   assert.deepEqual([report.scanned, report.javascript, report.notAnalyzed, report.verdict], [1, ["web/app.js"], 2, "hidden"]);
 });

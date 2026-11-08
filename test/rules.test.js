@@ -93,3 +93,13 @@ test("CfxLua syntax parses; broken Lua still gets the text checks", () => {
   assert.equal(broken.parsed, false);
   assert.ok(broken.findings.some((x) => x.code === "LAB-SEC-107"));
 });
+
+test("2026.11.1: JavaScript text checks", () => {
+  const js = (source) => securityRules("server.js", source).findings.map((f) => f.code);
+  assert.ok(js("fetch(u).then((r) => r.text()).then((t) => eval(t))").includes("LAB-SEC-111"));
+  assert.ok(js("eval(Buffer.from(data, 'base64').toString())").includes("LAB-SEC-111"));
+  assert.ok(js("const a = [1, 2]; new Function(a.map((x) => String.fromCharCode(x ^ 7)).join(''))()").includes("LAB-SEC-111"));
+  assert.ok(!js("const x = eval('1 + 1')").includes("LAB-SEC-111"));
+  assert.ok(!js("fetch(u).then((r) => r.json()).then(console.log)").includes("LAB-SEC-111"));
+  assert.ok(js("require('child_process').exec('ls')").includes("LAB-SEC-106"));
+});
