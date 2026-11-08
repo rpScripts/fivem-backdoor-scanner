@@ -1,5 +1,5 @@
 {
-  "rulesetVersion": "2026.10.6",
+  "rulesetVersion": "2026.11.1",
   "rules": {
     "LAB-SEC-101": {
       "severity": "warning",
@@ -105,6 +105,45 @@
       "title": "Archive entry with an unsafe path",
       "fix": "Entries with '..', absolute paths or drive letters can write outside the folder they are extracted to. They were skipped; extract the archive with a tool that refuses them.",
       "refs": []
+    },
+    "LAB-SEC-109": {
+      "severity": "warning",
+      "confidence": "heuristic",
+      "method": "pattern",
+      "title": "Grants server permissions to a fixed identifier",
+      "fix": "add_principal / add_ace for one named license, Steam or Discord ID puts a person into your admin group from inside a script. If you did not put it there, remove it and treat the package as compromised.",
+      "refs": [
+        {
+          "label": "Secure your events (docs.fivem.net)",
+          "url": "https://docs.fivem.net/docs/developers/server-security/"
+        }
+      ]
+    },
+    "LAB-SEC-110": {
+      "severity": "warning",
+      "confidence": "heuristic",
+      "method": "pattern",
+      "title": "Runs code that an event delivers",
+      "fix": "load() on an event argument lets anyone who can trigger that event run code on this side. Remove it; a legitimate resource passes data, not code.",
+      "refs": [
+        {
+          "label": "Secure your events (docs.fivem.net)",
+          "url": "https://docs.fivem.net/docs/developers/server-security/"
+        }
+      ]
+    },
+    "LAB-SEC-111": {
+      "severity": "warning",
+      "confidence": "heuristic",
+      "method": "pattern",
+      "title": "JavaScript runs fetched or decoded text",
+      "fix": "eval, new Function and vm.run* on downloaded or decoded text is how a JavaScript backdoor loads its payload. Read the reported line; legitimate resources do not need it.",
+      "refs": [
+        {
+          "label": "Secure your events (docs.fivem.net)",
+          "url": "https://docs.fivem.net/docs/developers/server-security/"
+        }
+      ]
     }
   }
 }

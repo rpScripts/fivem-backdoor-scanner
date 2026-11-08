@@ -48,6 +48,54 @@ const DB_SECRET = /^mysql_connection_string$/i;
 const IP_URL = /^(?:https?:)?\/\/(?!(?:127|10|0)\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)\d{1,3}(?:\.\d{1,3}){3}(?:[:/?]|$)/i;
 const HTTP = new Set(["PerformHttpRequest", "PerformHttpRequestAwait"]);
 const LOADERS = new Set(["load", "loadstring"]);
+// `add_principal identifier.license:<hex> …` / `add_ace identifier.…` with a hard-coded person: an admin planted in the file.
+const GRANT = /\badd_(?:principal|ace)\s+identifier\.[a-z0-9]+:[0-9a-f]{6,}/i;
+const JS_FILE = /\.(?:[cm]?js)$/i;
+const JS_RUN = /\b(?:eval|runIn(?:This|New)Context)\s*\(|\bnew\s+(?:Function|vm\.Script)\s*\(/;
+const JS_NET = /\b(?:fetch|axios|got)\s*\(|\bhttps?\.(?:get|request)\s*\(|require\(\s*['"](?:node:)?https?['"]\s*\)|\bXMLHttpRequest\b/;
+const JS_DECODE = /\batob\s*\(|Buffer\.from\([^)]*['"]base64['"]|String\.fromCharCode|\bunescape\s*\(/;
+const JS_PROCESS = /require\(\s*['"](?:node:)?child_process['"]\s*\)|from\s+['"](?:node:)?child_process['"]/;
+
+/** A string built only from literals (`"lo".."ad"`), else null. */
+function folded(e) {
+  if (e?.type === "StringLiteral") return stringValue(e.raw);
+  if (e?.type === "BinaryExpression" && e.operator === "..") {
+    const left = folded(e.left);
+    const right = folded(e.right);
+    return left !== null && right !== null ? left + right : null;
+  }
+  return null;
+}
+
+/** Names that stand for load/loadstring: `local run = loadstring`, `_G.load`, `_G["lo".."ad"]`, aliases of aliases. */
+function loaderNames(root) {
+  const names = new Set(LOADERS);
+  const global = (b) => b.type === "Identifier" && (b.name === "_G" || b.name === "_ENV");
+  const isLoader = (e) =>
+    e.type === "Identifier" ? names.has(e.name)
+    : e.type === "MemberExpression" ? global(e.base) && LOADERS.has(e.identifier.name)
+    : e.type === "IndexExpression" ? global(e.base) && LOADERS.has(folded(e.index) ?? "")
+    : false;
+  walk(root, (n) => {
+    if (n.type === "LocalStatement" || n.type === "AssignmentStatement")
+      n.init.forEach((e, i) => {
+        const v = n.variables[i];
+        if (v?.type === "Identifier" && isLoader(e)) names.add(v.name);
+      });
+  });
+  return names;
+}
+
+// JavaScript has no parser here: text checks only. Runs fetched or decoded text, or starts programs on the host.
+function jsRules(path, source) {
+  const out = [];
+  const run = JS_RUN.exec(source);
+  if (run && (JS_NET.test(source) || JS_DECODE.test(source)))
+    out.push(finding("LAB-SEC-111", "This JavaScript runs text with eval/new Function/vm and also fetches or decodes text.", { path, line: lineAt(source, run.index) }));
+  const proc = JS_PROCESS.exec(source);
+  if (proc) out.push(finding("LAB-SEC-106", "child_process runs programs on the server's host.", { path, line: lineAt(source, proc.index) }));
+  return out;
+}
 
 const escapes = (raw) => raw.match(ESCAPE)?.length ?? 0;
 
@@ -96,6 +144,7 @@ function luaRules(path, chunk) {
   const out = [];
   const list = calls(chunk);
   const http = list.filter(({ name }) => name && HTTP.has(name));
+  const loaders = loaderNames(chunk);
   const remote = new Set();
   // io.popen('ls "…"') / ('dir "…" /b') to list a folder is common in legitimate loaders.
   let lists = false;
@@ -107,7 +156,7 @@ function luaRules(path, chunk) {
   for (const { call } of http)
     for (const fn of argsOf(call).filter((a) => a.type === "FunctionDeclaration"))
       for (const inner of calls(fn))
-        if (inner.name && LOADERS.has(inner.name)) {
+        if (inner.name && loaders.has(inner.name)) {
           remote.add(inner.call);
           out.push(finding("LAB-SEC-101", `${inner.name}() runs the body of an HTTP response: whoever controls that server can run any code on yours.`, { path, line: lineOf(inner.call) }));
         }
@@ -115,7 +164,7 @@ function luaRules(path, chunk) {
   for (const { call, name } of list) {
     if (!name) continue;
     const args = argsOf(call);
-    if (LOADERS.has(name) && !remote.has(call) && args[0] && hidden(args[0]))
+    if (loaders.has(name) && !remote.has(call) && args[0] && hidden(args[0]))
       out.push(finding("LAB-SEC-102", `${name}() runs text that is only decoded at runtime.`, { path, line: lineOf(call) }));
     if ((name === "GetConvar" || name === "GetConvarInt") && args[0]) {
       const convar = literal(args[0]);
@@ -124,10 +173,25 @@ function luaRules(path, chunk) {
     }
     if (HTTP.has(name) && args[0] && hidden(args[0]))
       out.push(finding("LAB-SEC-105", "The address of this HTTP request is only decoded at runtime.", { path, line: lineOf(call) }));
+    if (name === "ExecuteCommand" && GRANT.test(literal(args[0]) ?? ""))
+      out.push(finding("LAB-SEC-109", "ExecuteCommand grants server permissions to a hard-coded identifier.", { path, line: lineOf(call) }));
     if (name === "os.execute" || (name === "io.popen" && !lists))
       out.push(finding("LAB-SEC-106", `${name} runs a program on the server's host.`, { path, line: lineOf(call) }));
     if (name === "io.open" && /^[wa]|\+/.test(literal(args[1]) ?? "") && !JSON.stringify(args[0] ?? null).includes("GetResourcePath"))
       out.push(finding("LAB-SEC-106", "io.open writes to a path that isn't built from GetResourcePath(…).", { path, line: lineOf(call) }));
+  }
+
+  // A handler that runs the text its event delivers: whoever can trigger the event runs code on this side.
+  for (const { call, name } of list) {
+    if (!name || !(name === "RegisterNetEvent" || name === "RegisterServerEvent" || name === "AddEventHandler")) continue;
+    for (const fn of argsOf(call).filter((x) => x.type === "FunctionDeclaration")) {
+      const params = new Set(fn.parameters.flatMap((x) => (x.type === "Identifier" ? [x.name] : [])));
+      for (const inner of calls(fn)) {
+        const arg = argsOf(inner.call)[0];
+        if (inner.name && loaders.has(inner.name) && arg?.type === "Identifier" && params.has(arg.name))
+          out.push(finding("LAB-SEC-110", `${inner.name}() runs text delivered by an event.`, { path, line: lineOf(inner.call) }));
+      }
+    }
   }
 
   // SaveResourceFile into a resource computed at runtime (e.g. every resource from GetResourceByFindIndex): how
@@ -174,6 +238,7 @@ function luaRules(path, chunk) {
  */
 export function securityRules(path, source) {
   const text = [...hiddenCode(path, source), ...shippedCredentials(path, source)];
+  if (JS_FILE.test(path)) return { findings: [...text, ...jsRules(path, source)], parsed: true };
   if (!path.toLowerCase().endsWith(".lua")) return { findings: text, parsed: true };
   try {
     return { findings: [...luaRules(path, parseLua(source)), ...text], parsed: true };

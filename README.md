@@ -51,8 +51,11 @@ jobs:
 | LAB-SEC-103 | warning | Obfuscated data: long escaped-byte strings, 400+ character base64/hex, long `string.char` lists |
 | LAB-SEC-104 | warning | Reads `sv_licenseKey`, `rcon_password`, `sv_tebexSecret`, or the MySQL string in a file that sends HTTP |
 | LAB-SEC-105 | warning | HTTP requests to a public raw IP or to an address decoded at runtime |
-| LAB-SEC-106 | warning | `os.execute`, `io.popen`, writes outside the own resource, `SaveResourceFile` into other resources |
+| LAB-SEC-106 | warning | `os.execute`, `io.popen`, JavaScript `child_process`, writes outside the own resource, `SaveResourceFile` into other resources |
 | LAB-SEC-108 | warning | A real-shaped Discord bot token, Discord webhook, Cfx license key or GitHub token in the files |
+| LAB-SEC-109 | warning | `ExecuteCommand("add_principal identifier.license:<hex> …")` or `add_ace identifier.…` with a hard-coded person (an admin planted in the file) |
+| LAB-SEC-110 | warning | `load()` / `loadstring()` on a parameter of an event handler: anyone who can trigger the event runs code |
+| LAB-SEC-111 | warning | JavaScript with `eval`, `new Function` or `vm.run*` in a file that also fetches (`fetch`, `http(s)`) or decodes (`atob`, base64, `fromCharCode`) text |
 | LAB-PKG-004 | warning | `.exe`, `.dll`, `.bat`, `.cmd`, `.ps1`, `.sh`, `.vbs`, `.jar`, `.scr` in a folder or archive (`.dll` is expected next to a `*.net.dll`, a C# resource) |
 | LAB-PKG-005 | warning | Archive entry with `..`, an absolute path or a drive letter: extracting it can write outside the target folder |
 
@@ -75,7 +78,11 @@ Findings always win over coverage. A clean result covers these patterns only. It
 
 - Escrow-protected code can only be read by FXServer, so no scanner can check it.
 - The Lua checks need a parse. CfxLua syntax (`+=`, `?.`, `<const>`, backtick hashes, `/* */`) is supported.
-- JavaScript gets the hidden-code and credential checks, not the Lua rules.
+- JavaScript gets the hidden-code and credential checks plus the text patterns above (LAB-SEC-111, `child_process`), no parser. A
+  JavaScript backdoor that avoids those words is not seen.
+- Not detected: a function name decoded at runtime and called as `_G[name]`, `load(LoadResourceFile(other, …))`, a remote
+  `<script src>` in NUI HTML, escrowed or compiled code. Tested on 11 well-known open-source resources (ox_lib, qb-core, esx_core,
+  txAdmin, …): no hidden-code finding, a few expected warnings (`rcon_password` in the runcode dev tool, `SaveResourceFile`).
 - Archives inside a ZIP (`.zip`, `.rar`, `.7z`) are listed, not unpacked. Only `.zip` is read.
 - 2 MB per file and 120 MB of code in total. ZIP entries whose header, size or CRC disagree with the central directory,
   or that an extractor would write under another name, are reported as unreadable, never as clean.
