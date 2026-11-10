@@ -3,6 +3,12 @@
 Versions are `YYYY.MM.N`, the same as the ruleset of https://rpscripts.net/tools/fivem-backdoor-scanner/. A rule code
 never changes meaning.
 
+## 2026.11.2
+
+- New LAB-SEC-112: a string of the Blum / Warden / Cipher / GFX Panel family in any file (C2 hosts, operator handles and keys, txAdmin tampering markers such as `helpEmptyCode`, `onServerResourceFail`, `RESOURCE_EXCLUDE`), or a manifest that loads a `.js` from a dot file or dot folder, or after a commented-out entry and 20+ spaces. Indicators from https://github.com/ImJer/blum-panel-fivem-backdoor-analysis (iocs 2026.08.07).
+- LAB-SEC-101, LAB-SEC-102 and LAB-SEC-110 follow `pcall(load, code)` and `xpcall(load, handler, code)`.
+- LAB-SEC-103 names a file with a Luraph header.
+
 ## 2026.11.1
 
 - New LAB-SEC-109: `ExecuteCommand` with `add_principal` / `add_ace identifier.<type>:<hex>` (a hard-coded person added to a group).

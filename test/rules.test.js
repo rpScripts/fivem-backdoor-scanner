@@ -103,3 +103,32 @@ test("2026.11.1: JavaScript text checks", () => {
   assert.ok(!js("fetch(u).then((r) => r.json()).then(console.log)").includes("LAB-SEC-111"));
   assert.ok(js("require('child_process').exec('ls')").includes("LAB-SEC-106"));
 });
+
+test("LAB-SEC-112: Blum Panel indicators and manifest tricks, not look-alikes", () => {
+  const codes = (path, source) => securityRules(path, source).findings.map((f) => f.code);
+  assert.ok(codes("a.lua", 'local u = "https://9ns1.com/x"').includes("LAB-SEC-112"));
+  assert.ok(codes("a.js", "https.get('https://cdn.fivems.lt/bertJJ')").includes("LAB-SEC-112"));
+  assert.ok(codes("sv_main.lua", "local RESOURCE_EXCLUDE = { 'monitor' }").includes("LAB-SEC-112"));
+  for (const clean of ['local u = "https://github.net/x"', 'print("ggWP")', 'local u = "https://my5mscripts.net"', "local nullJJs, devJJx = 1, 2"]) assert.ok(!codes("a.lua", clean).includes("LAB-SEC-112"), clean);
+  const manifest = (entry) => codes("res/fxmanifest.lua", `fx_version 'cerulean'\nserver_scripts {\n  ${entry},\n}`);
+  for (const bad of [`--[[server.lua]]${" ".repeat(40)}'html/cache.js'`, "'html/.env_backup.js'", "'node_modules/.cache/babel_config.js'", "'.sync.js'"]) assert.ok(manifest(bad).includes("LAB-SEC-112"), bad);
+  for (const clean of ["'./server/main.js'", "'../shared/x.js'", "'server/*.js'", "'html/app.min.js'"]) assert.ok(!manifest(clean).includes("LAB-SEC-112"), clean);
+});
+
+test("LAB-SEC-110/101: load passed to pcall or xpcall", () => {
+  assert.ok(fires('RegisterNetEvent("x", function(id) xpcall(load, print, id) end)', "LAB-SEC-110"));
+  assert.ok(fires("PerformHttpRequest(url, function(e, d) local ok, f = pcall(load, d) end)", "LAB-SEC-101"));
+  assert.ok(!fires('RegisterNetEvent("x", function(id) pcall(print, id) end)', "LAB-SEC-110"));
+});
+
+test("LAB-SEC-112 stays precise and linear", () => {
+  const codes = (path, source) => securityRules(path, source).findings.map((f) => f.code);
+  const manifest = (entry) => codes("fxmanifest.lua", `fx_version 'cerulean'\n${entry}`);
+  for (const clean of ["files { 'web/.next/static/chunks/main.js' }", "-- see 'a/.b.js'", "--[[ 'x/.y.js' ]] server_script 'server.lua'"]) assert.ok(!manifest(clean).includes("LAB-SEC-112"), clean);
+  assert.ok(manifest(`--[==[ a[1] ]==]${" ".repeat(30)}'x.js'`).includes("LAB-SEC-112"));
+  assert.ok(!codes("a.lua", "local robertJJ = 1").includes("LAB-SEC-112"));
+  assert.ok(!codes("README.md", "credits: fivems.lt").includes("LAB-SEC-112"));
+  const start = performance.now();
+  for (const bad of ['"' + "/.a".repeat(600_000), "--[[".repeat(500_000), ('"' + "/.a".repeat(600) + "\n").repeat(1000)]) manifest(bad);
+  assert.ok(performance.now() - start < 1500);
+});

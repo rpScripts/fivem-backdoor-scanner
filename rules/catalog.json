@@ -1,5 +1,5 @@
 {
-  "rulesetVersion": "2026.11.1",
+  "rulesetVersion": "2026.11.2",
   "rules": {
     "LAB-SEC-101": {
       "severity": "warning",
@@ -142,6 +142,19 @@
         {
           "label": "Secure your events (docs.fivem.net)",
           "url": "https://docs.fivem.net/docs/developers/server-security/"
+        }
+      ]
+    },
+    "LAB-SEC-112": {
+      "severity": "warning",
+      "confidence": "likely",
+      "method": "pattern",
+      "title": "Known backdoor indicator",
+      "fix": "This string or manifest entry is documented for the Blum / Warden / Cipher Panel backdoor. Treat the package as compromised: remove the resource, reinstall txAdmin, and rotate the license key, RCON and database passwords.",
+      "refs": [
+        {
+          "label": "Blum Panel analysis and indicators",
+          "url": "https://github.com/ImJer/blum-panel-fivem-backdoor-analysis"
         }
       ]
     }

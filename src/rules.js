@@ -140,6 +140,47 @@ function shippedCredentials(path, source) {
   });
 }
 
+// Indicators of the Blum / Warden / Cipher / GFX Panel family (github.com/ImJer/blum-panel-fivem-backdoor-analysis,
+// iocs 2026.08.07): C2 hosts, operator handles and keys, txAdmin tampering markers. Exact strings only; left out as too
+// common: "ggWP" alone, decompressFromUTF16 (lz-string), the dropper file names (main.js, index.js, …).
+const BLUM_HOSTS =
+  "0xchitado.com 2312321321321213.com 2nit32.com 2ns3.net 5mscripts.net 9ns1.com bhlool.com blum-panel.com blum-panel.me bybonvieux.com cipher-panel.me ciphercheats.com dark-utilities.xyz fivemgtax.com fivems.lt flowleakz.org gfxpanel.org giithub.net iwantaticket.org jking.lt keyx.club kutingplays.com l00x.org monloox.com noanimeisgay.com ryenz.net spacedev.fr trezz.org useer.it.com warden-panel.me wsichkidolu.com z1lly.org";
+const BLUM = new RegExp(
+  String.raw`(?<![\w-])(?:${BLUM_HOSTS.replaceAll(".", String.raw`\.`).replaceAll(" ", "|")})(?![\w-])|(?<![A-Za-z])[bB]ert[jJ][jJ]|miaus(?:s|as)|GlobalState\.ggWP|txadmin:js_create|\b(?:helpEmptyCode|onServerResourceFail|RESOURCE_EXCLUDE|isExcludedResource|JohnsUrUncle|installed_notices|VB8mdVjrzd|UARZT6|1470175544682217685|(?:anon|blum|city|dev|gang|mafia|null|panel|roleplay|zXeAH)JJ)\b`,
+);
+// A manifest entry that the family smuggles in: a .js after a commented-out entry and a run of spaces, a .js dot file
+// (`html/.env.js`), or a .js under `node_modules/.…`. `./x.js`, `../x.js` and build folders like `.next/` are ordinary.
+// Both run per line on lines up to MANIFEST_LINE characters: on a whole file they are quadratic (review 2026-11-10).
+const MANIFEST_DECOY = /--\[=*\[.*?\]=*\][ \t]{20,}['"][^'"]*\.js['"]/;
+const MANIFEST_DOT = /(['"])(?:(?:[^'"]*[\\/])?\.[^'"\\/*]+\.js|(?:[^'"]*[\\/])?node_modules[\\/]\.[^'"]*\.js)\1/;
+const MANIFEST_LINE = 2000;
+const uncommented = (line) => line.replace(/--\[=*\[.*?\]=*\]/g, "").replace(/--.*$/, "");
+const MANIFEST = /(?:^|\/)(?:fxmanifest|__resource)\.lua$/;
+
+function knownBackdoor(path, source) {
+  const at = (m) => ({ path, line: lineAt(source, m.index) });
+  const out = [];
+  const ioc = /\.(?:lua|[cm]?js)$/i.test(path) ? BLUM.exec(source) : null;
+  if (ioc) out.push(finding("LAB-SEC-112", `Contains '${ioc[0]}', an indicator of the Blum Panel backdoor family.`, at(ioc)));
+  if (MANIFEST.test(path)) {
+    const line = source.split("\n").findIndex((l) => l.length <= MANIFEST_LINE && (MANIFEST_DECOY.test(l) || MANIFEST_DOT.test(uncommented(l))));
+    if (line >= 0) out.push(finding("LAB-SEC-112", "The manifest loads a JavaScript file from a hidden place (a dot file, node_modules/.…, or after a commented-out entry).", { path, line: line + 1 }));
+  }
+  // Luraph's header is a comment, which the parser drops; the code below it can't be read by any static check.
+  const luraph = path.toLowerCase().endsWith(".lua") ? /Luraph Obfuscator/.exec(source) : null;
+  if (luraph) out.push(finding("LAB-SEC-103", "This file is obfuscated with Luraph.", at(luraph)));
+  return out;
+}
+
+/** A loader call and the arguments it gets, also through `pcall(load, code)` / `xpcall(load, handler, code)`. */
+function loadCall(call, name, loaders) {
+  const args = argsOf(call);
+  if (name && loaders.has(name)) return { name, args };
+  const skip = name === "pcall" ? 1 : name === "xpcall" ? 2 : 0;
+  const fn = args[0];
+  return skip && fn?.type === "Identifier" && loaders.has(fn.name) ? { name: fn.name, args: args.slice(skip) } : null;
+}
+
 function luaRules(path, chunk) {
   const out = [];
   const list = calls(chunk);
@@ -155,17 +196,20 @@ function luaRules(path, chunk) {
   // Code loaded inside an HTTP response handler: `PerformHttpRequest(url, function(_, body) assert(load(body))() end)`.
   for (const { call } of http)
     for (const fn of argsOf(call).filter((a) => a.type === "FunctionDeclaration"))
-      for (const inner of calls(fn))
-        if (inner.name && loaders.has(inner.name)) {
+      for (const inner of calls(fn)) {
+        const run = loadCall(inner.call, inner.name, loaders);
+        if (run) {
           remote.add(inner.call);
-          out.push(finding("LAB-SEC-101", `${inner.name}() runs the body of an HTTP response: whoever controls that server can run any code on yours.`, { path, line: lineOf(inner.call) }));
+          out.push(finding("LAB-SEC-101", `${run.name}() runs the body of an HTTP response: whoever controls that server can run any code on yours.`, { path, line: lineOf(inner.call) }));
         }
+      }
 
   for (const { call, name } of list) {
     if (!name) continue;
     const args = argsOf(call);
-    if (loaders.has(name) && !remote.has(call) && args[0] && hidden(args[0]))
-      out.push(finding("LAB-SEC-102", `${name}() runs text that is only decoded at runtime.`, { path, line: lineOf(call) }));
+    const run = loadCall(call, name, loaders);
+    if (run && !remote.has(call) && run.args[0] && hidden(run.args[0]))
+      out.push(finding("LAB-SEC-102", `${run.name}() runs text that is only decoded at runtime.`, { path, line: lineOf(call) }));
     if ((name === "GetConvar" || name === "GetConvarInt") && args[0]) {
       const convar = literal(args[0]);
       if (convar && (SECRET.test(convar) || (DB_SECRET.test(convar) && http.length > 0)))
@@ -187,9 +231,10 @@ function luaRules(path, chunk) {
     for (const fn of argsOf(call).filter((x) => x.type === "FunctionDeclaration")) {
       const params = new Set(fn.parameters.flatMap((x) => (x.type === "Identifier" ? [x.name] : [])));
       for (const inner of calls(fn)) {
-        const arg = argsOf(inner.call)[0];
-        if (inner.name && loaders.has(inner.name) && arg?.type === "Identifier" && params.has(arg.name))
-          out.push(finding("LAB-SEC-110", `${inner.name}() runs text delivered by an event.`, { path, line: lineOf(inner.call) }));
+        const run = loadCall(inner.call, inner.name, loaders);
+        const arg = run?.args[0];
+        if (run && arg?.type === "Identifier" && params.has(arg.name))
+          out.push(finding("LAB-SEC-110", `${run.name}() runs text delivered by an event.`, { path, line: lineOf(inner.call) }));
       }
     }
   }
@@ -237,7 +282,7 @@ function luaRules(path, chunk) {
  * `parsed: false` = the Lua did not parse, so only the text checks ran.
  */
 export function securityRules(path, source) {
-  const text = [...hiddenCode(path, source), ...shippedCredentials(path, source)];
+  const text = [...hiddenCode(path, source), ...shippedCredentials(path, source), ...knownBackdoor(path, source)];
   if (JS_FILE.test(path)) return { findings: [...text, ...jsRules(path, source)], parsed: true };
   if (!path.toLowerCase().endsWith(".lua")) return { findings: text, parsed: true };
   try {

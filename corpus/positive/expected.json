@@ -8,6 +8,9 @@
   "sec-102-decoded-load.lua": [
     "LAB-SEC-102"
   ],
+  "sec-103-luraph-header.lua": [
+    "LAB-SEC-103"
+  ],
   "sec-104-license-key.lua": [
     "LAB-SEC-104"
   ],
@@ -28,5 +31,9 @@
   ],
   "sec-110-event-load.lua": [
     "LAB-SEC-110"
+  ],
+  "sec-112-blum-txadmin-rce.lua": [
+    "LAB-SEC-110",
+    "LAB-SEC-112"
   ]
 }
