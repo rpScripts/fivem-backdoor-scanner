@@ -56,6 +56,7 @@ jobs:
 | LAB-SEC-109 | warning | `ExecuteCommand("add_principal identifier.license:<hex> …")` or `add_ace identifier.…` with a hard-coded person (an admin planted in the file) |
 | LAB-SEC-110 | warning | `load()` / `loadstring()` on a parameter of an event handler: anyone who can trigger the event runs code |
 | LAB-SEC-111 | warning | JavaScript with `eval`, `new Function` or `vm.run*` in a file that also fetches (`fetch`, `http(s)`) or decodes (`atob`, base64, `fromCharCode`) text |
+| LAB-SEC-112 | warning | A string of the Blum / Warden / Cipher / GFX Panel backdoor (C2 hosts, operator keys, txAdmin tampering markers), or a manifest that loads a `.js` from a dot file or folder or after a commented-out entry |
 | LAB-PKG-004 | warning | `.exe`, `.dll`, `.bat`, `.cmd`, `.ps1`, `.sh`, `.vbs`, `.jar`, `.scr` in a folder or archive (`.dll` is expected next to a `*.net.dll`, a C# resource) |
 | LAB-PKG-005 | warning | Archive entry with `..`, an absolute path or a drive letter: extracting it can write outside the target folder |
 
