@@ -32,6 +32,9 @@
   "sec-110-event-load.lua": [
     "LAB-SEC-110"
   ],
+  "sec-111-base64-eval.js": [
+    "LAB-SEC-111"
+  ],
   "sec-112-blum-txadmin-rce.lua": [
     "LAB-SEC-110",
     "LAB-SEC-112"

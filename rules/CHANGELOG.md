@@ -3,6 +3,10 @@
 Versions are `YYYY.MM.N`, the same as the ruleset of https://rpscripts.net/tools/fivem-backdoor-scanner/. A rule code
 never changes meaning.
 
+## Unreleased
+
+- LAB-SEC-111 (2026-11-12): `Buffer.from(` and a `'base64'` argument are matched apart, so a base64 literal of any length or one split across lines is reported, and a file of unclosed `Buffer.from(` calls is scanned in linear time. Same change as the web scanner; the ruleset version is unchanged so far.
+
 ## 2026.11.2
 
 - New LAB-SEC-112: a string of the Blum / Warden / Cipher / GFX Panel family in any file (C2 hosts, operator handles and keys, txAdmin tampering markers such as `helpEmptyCode`, `onServerResourceFail`, `RESOURCE_EXCLUDE`), or a manifest that loads a `.js` from a dot file or dot folder, or after a commented-out entry and 20+ spaces. Indicators from https://github.com/ImJer/blum-panel-fivem-backdoor-analysis (iocs 2026.08.07).

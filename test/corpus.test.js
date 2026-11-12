@@ -4,7 +4,7 @@ import { test } from "node:test";
 import { securityRules } from "../src/index.js";
 
 const dir = (name) => new URL(`../corpus/${name}/`, import.meta.url);
-const luaFiles = (name) => readdirSync(dir(name)).filter((f) => f.endsWith(".lua")).sort();
+const luaFiles = (name) => readdirSync(dir(name)).filter((f) => /\.(?:lua|js)$/.test(f)).sort();
 const scan = (name, f) => securityRules(f, readFileSync(new URL(f, dir(name)), "utf8"));
 
 test("corpus: every positive sample gives exactly the codes in expected.json", () => {
@@ -34,4 +34,11 @@ test("LAB-SEC-107 stays linear: a 500 KB line of blanks finishes in under 100 ms
   assert.ok(performance.now() - start < 100);
   assert.deepEqual(r.findings, []);
   assert.equal(r.parsed, true);
+});
+
+test("LAB-SEC-111 stays linear: 40,000 unclosed Buffer.from( calls finish in under 2 s", () => {
+  const start = performance.now();
+  const r = securityRules("server.js", `eval(x);\n${"Buffer.from(".repeat(40_000)}`);
+  assert.ok(performance.now() - start < 2_000);
+  assert.deepEqual(r.findings, []);
 });

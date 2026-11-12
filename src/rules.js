@@ -53,7 +53,10 @@ const GRANT = /\badd_(?:principal|ace)\s+identifier\.[a-z0-9]+:[0-9a-f]{6,}/i;
 const JS_FILE = /\.(?:[cm]?js)$/i;
 const JS_RUN = /\b(?:eval|runIn(?:This|New)Context)\s*\(|\bnew\s+(?:Function|vm\.Script)\s*\(/;
 const JS_NET = /\b(?:fetch|axios|got)\s*\(|\bhttps?\.(?:get|request)\s*\(|require\(\s*['"](?:node:)?https?['"]\s*\)|\bXMLHttpRequest\b/;
-const JS_DECODE = /\batob\s*\(|Buffer\.from\([^)]*['"]base64['"]|String\.fromCharCode|\bunescape\s*\(/;
+const JS_DECODE = /\batob\s*\(|String\.fromCharCode|\bunescape\s*\(/;
+// Tested apart: the base64 literal between them can be any length and span lines.
+const JS_BASE64_FROM = /Buffer\.from\s*\(/;
+const JS_BASE64 = /['"]base64['"]/;
 const JS_PROCESS = /require\(\s*['"](?:node:)?child_process['"]\s*\)|from\s+['"](?:node:)?child_process['"]/;
 
 /** A string built only from literals (`"lo".."ad"`), else null. */
@@ -90,7 +93,7 @@ function loaderNames(root) {
 function jsRules(path, source) {
   const out = [];
   const run = JS_RUN.exec(source);
-  if (run && (JS_NET.test(source) || JS_DECODE.test(source)))
+  if (run && (JS_NET.test(source) || JS_DECODE.test(source) || (JS_BASE64_FROM.test(source) && JS_BASE64.test(source))))
     out.push(finding("LAB-SEC-111", "This JavaScript runs text with eval/new Function/vm and also fetches or decodes text.", { path, line: lineAt(source, run.index) }));
   const proc = JS_PROCESS.exec(source);
   if (proc) out.push(finding("LAB-SEC-106", "child_process runs programs on the server's host.", { path, line: lineAt(source, proc.index) }));
