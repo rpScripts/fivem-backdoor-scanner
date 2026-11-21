@@ -3,6 +3,10 @@
 Versions are `YYYY.MM.N`, the same as the ruleset of https://rpscripts.net/tools/fivem-backdoor-scanner/. A rule code
 never changes meaning.
 
+## 2026.11.16
+
+- No LAB-SEC or LAB-PKG rule changed. The web scanner's framework API check no longer reads a player taken from another framework's export (`exports['echorp']:GetPlayerFromId`) as an ESX xPlayer. This is a resource check, which this scanner does not have.
+
 ## 2026.11.15
 
 - No LAB-SEC or LAB-PKG rule changed. The web scanner's ox_lib manifest check no longer reads a legacy `__resource.lua` as code and accepts ox_lib's manual import `load(LoadResourceFile('ox_lib', 'init.lua'))`. This is a resource check, which this scanner does not have.
