@@ -3,6 +3,10 @@
 Versions are `YYYY.MM.N`, the same as the ruleset of https://rpscripts.net/tools/fivem-backdoor-scanner/. A rule code
 never changes meaning.
 
+## 2026.11.17
+
+- No LAB-SEC or LAB-PKG rule changed. The web scanner now counts exports from modules loaded with `require`, reads only manifest-loaded files for its ox_lib check, treats nil comparisons as probes and ignores a `__resource.lua` shadowed by an `fxmanifest.lua`. These are resource checks, which this scanner does not have.
+
 ## 2026.11.16
 
 - No LAB-SEC or LAB-PKG rule changed. The web scanner's framework API check no longer reads a player taken from another framework's export (`exports['echorp']:GetPlayerFromId`) as an ESX xPlayer. This is a resource check, which this scanner does not have.
