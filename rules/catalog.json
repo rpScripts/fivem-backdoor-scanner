@@ -1,5 +1,5 @@
 {
-  "rulesetVersion": "2026.11.2",
+  "rulesetVersion": "2026.11.7",
   "rules": {
     "LAB-SEC-101": {
       "severity": "warning",
@@ -155,6 +155,19 @@
         {
           "label": "Blum Panel analysis and indicators",
           "url": "https://github.com/ImJer/blum-panel-fivem-backdoor-analysis"
+        }
+      ]
+    },
+    "LAB-SEC-115": {
+      "severity": "error",
+      "confidence": "likely",
+      "method": "pattern",
+      "title": "Hides the name of load()",
+      "fix": "Readable code calls load by its name. Writing it as hex, base64, escaped bytes or string.char is how licence loaders and backdoors run code they fetch or decode without it showing up in a search. Remove the resource or the loader; find out what it runs first.",
+      "refs": [
+        {
+          "label": "Secure your events (docs.fivem.net)",
+          "url": "https://docs.fivem.net/docs/developers/server-security/"
         }
       ]
     }

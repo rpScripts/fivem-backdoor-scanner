@@ -3,9 +3,29 @@
 Versions are `YYYY.MM.N`, the same as the ruleset of https://rpscripts.net/tools/fivem-backdoor-scanner/. A rule code
 never changes meaning.
 
-## Unreleased
+## 2026.11.7
 
-- LAB-SEC-111 (2026-11-12): `Buffer.from(` and a `'base64'` argument are matched apart, so a base64 literal of any length or one split across lines is reported, and a file of unclosed `Buffer.from(` calls is scanned in linear time. Same change as the web scanner; the ruleset version is unchanged so far.
+- CfxLua table unpacking (`local title, duration in data`) is read as `= data`, so the Lua checks run on such files instead of reporting them as not parsed.
+
+## 2026.11.6
+
+- New LAB-SEC-115 (error): the name of `load` / `loadstring` written in encoded form anywhere in a Lua file: its hex or base64 text, escaped bytes, `string.char(108, 111, 97, 100)`, `("…"):fromhex()` or a literal concatenation (`"lo".."ad"`); one per file. A licence loader keeps `_G[("6C6F6164"):fromhex()]` in a table and runs its server's answer through it, which no call-shape check followed.
+- LAB-SEC-103 names a file with a Boronide VM header.
+
+## 2026.11.5
+
+- No LAB-SEC or LAB-PKG rule changed. The web scanner's false-alarm fixes of this version concern its resource checks, which this scanner does not have.
+
+## 2026.11.4
+
+- No change to the rules of this scanner. The web scanner's new takeover hosts for LAB-SEC-114 apply to `<script src>` in NUI HTML, which this scanner does not read.
+
+## 2026.11.3
+
+- LAB-SEC-112 knows two more loader hosts, and the family's loader shape on any host: a `PerformHttpRequest` whose URL literal contains `/i?to=` and whose callback runs the reply with `load`.
+- LAB-SEC-101, LAB-SEC-102 and LAB-SEC-110 follow `_G[("6C6F6164"):fromhex()]` and `_G[string.char(108, …)]` (the literal is decoded statically) and `_G.load(…)` / `_G[…](…)` called directly. A name computed at runtime is not followed.
+- LAB-SEC-108 reports a Steam Web API key (32 hex characters in an `api.steampowered.com/…key=` URL, or assigned to a `steam…key` name). The value is never echoed.
+- LAB-SEC-111 (2026-11-12): `Buffer.from(` and a `'base64'` argument are matched apart, so a base64 literal of any length or one split across lines is reported, and a file of unclosed `Buffer.from(` calls is scanned in linear time.
 
 ## 2026.11.2
 

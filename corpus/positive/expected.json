@@ -1,12 +1,23 @@
 {
   "sec-101-alias-load.lua": [
-    "LAB-SEC-101"
+    "LAB-SEC-101",
+    "LAB-SEC-115"
+  ],
+  "sec-101-hex-global-load.lua": [
+    "LAB-SEC-101",
+    "LAB-SEC-115"
   ],
   "sec-101-http-load.lua": [
     "LAB-SEC-101"
   ],
   "sec-102-decoded-load.lua": [
     "LAB-SEC-102"
+  ],
+  "sec-102-global-load-direct.lua": [
+    "LAB-SEC-102"
+  ],
+  "sec-103-boronide-header.lua": [
+    "LAB-SEC-103"
   ],
   "sec-103-luraph-header.lua": [
     "LAB-SEC-103"
@@ -26,6 +37,9 @@
   "sec-108-credential.lua": [
     "LAB-SEC-108"
   ],
+  "sec-108-steam-key.lua": [
+    "LAB-SEC-108"
+  ],
   "sec-109-admin-grant.lua": [
     "LAB-SEC-109"
   ],
@@ -35,8 +49,15 @@
   "sec-111-base64-eval.js": [
     "LAB-SEC-111"
   ],
+  "sec-112-blum-loader-shape.lua": [
+    "LAB-SEC-101",
+    "LAB-SEC-112"
+  ],
   "sec-112-blum-txadmin-rce.lua": [
     "LAB-SEC-110",
     "LAB-SEC-112"
+  ],
+  "sec-115-encoded-load-name.lua": [
+    "LAB-SEC-115"
   ]
 }

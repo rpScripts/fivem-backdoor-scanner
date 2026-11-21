@@ -59,7 +59,10 @@ const JS_BASE64_FROM = /Buffer\.from\s*\(/;
 const JS_BASE64 = /['"]base64['"]/;
 const JS_PROCESS = /require\(\s*['"](?:node:)?child_process['"]\s*\)|from\s+['"](?:node:)?child_process['"]/;
 
-/** A string built only from literals (`"lo".."ad"`), else null. */
+/**
+ * A string built only from literals, else null: `"lo".."ad"`, and decoded statically from a literal: `("6C6F6164"):fromhex()`
+ * (metas.dev licence loaders), `string.char(108, 111, 97, 100)`. A name computed at runtime stays null.
+ */
 function folded(e) {
   if (e?.type === "StringLiteral") return stringValue(e.raw);
   if (e?.type === "BinaryExpression" && e.operator === "..") {
@@ -67,23 +70,35 @@ function folded(e) {
     const right = folded(e.right);
     return left !== null && right !== null ? left + right : null;
   }
+  if (e?.type === "CallExpression") {
+    const fn = e.base;
+    if (fn.type === "MemberExpression" && fn.indexer === ":" && fn.identifier.name === "fromhex" && !e.arguments.length) {
+      const hex = folded(fn.base);
+      return hex !== null && /^(?:[0-9a-fA-F]{2})*$/.test(hex) ? hex.replace(/../g, (b) => String.fromCharCode(parseInt(b, 16))) : null;
+    }
+    // Global names are short; the cap also keeps a huge argument list out of the spread below.
+    const bytes = e.arguments.length <= 64 ? e.arguments.flatMap((a) => (a.type === "NumericLiteral" ? [a.value] : [])) : [];
+    if (calleeOf(e) === "string.char" && bytes.length && bytes.length === e.arguments.length) return String.fromCharCode(...bytes);
+  }
   return null;
 }
+
+const isGlobal = (b) => b.type === "Identifier" && (b.name === "_G" || b.name === "_ENV");
+/** `load` or an alias of it, `_G.load`, `_G["lo".."ad"]`, `_G[("6C6F6164"):fromhex()]`. */
+const isLoader = (e, names) =>
+  e.type === "Identifier" ? names.has(e.name)
+  : e.type === "MemberExpression" ? isGlobal(e.base) && LOADERS.has(e.identifier.name)
+  : e.type === "IndexExpression" ? isGlobal(e.base) && LOADERS.has(folded(e.index) ?? "")
+  : false;
 
 /** Names that stand for load/loadstring: `local run = loadstring`, `_G.load`, `_G["lo".."ad"]`, aliases of aliases. */
 function loaderNames(root) {
   const names = new Set(LOADERS);
-  const global = (b) => b.type === "Identifier" && (b.name === "_G" || b.name === "_ENV");
-  const isLoader = (e) =>
-    e.type === "Identifier" ? names.has(e.name)
-    : e.type === "MemberExpression" ? global(e.base) && LOADERS.has(e.identifier.name)
-    : e.type === "IndexExpression" ? global(e.base) && LOADERS.has(folded(e.index) ?? "")
-    : false;
   walk(root, (n) => {
     if (n.type === "LocalStatement" || n.type === "AssignmentStatement")
       n.init.forEach((e, i) => {
         const v = n.variables[i];
-        if (v?.type === "Identifier" && isLoader(e)) names.add(v.name);
+        if (v?.type === "Identifier" && isLoader(e, names)) names.add(v.name);
       });
   });
   return names;
@@ -101,6 +116,45 @@ function jsRules(path, source) {
 }
 
 const escapes = (raw) => raw.match(ESCAPE)?.length ?? 0;
+
+// load/loadstring as hex or base64 text ("6C6F6164", "bG9hZA=="), the form a decoder turns back into the name.
+const LOADER_TEXT = /^(?:6c6f6164(?:737472696e67)?|bG9hZ(?:A|HN0cmluZw)={0,2})$/i;
+
+/**
+ * The first place a file writes the name load/loadstring in encoded form: hex or base64 text of the name, a literal of
+ * escaped bytes, string.char(108, …), `:fromhex()` or `"lo".."ad"`. Readable code calls load by its name; the metas.dev
+ * licence loader (Modit allhousing/furni, modfreakz drones) keeps `_G[("6C6F6164"):fromhex()]` in a table and runs the
+ * answer of its licence server through it, which no call-shape check follows (catalogue 2026-11-20).
+ */
+function hiddenLoaderName(root) {
+  let hit = null;
+  // A concatenation is folded once from its top; its inner ".." nodes are skipped, so long chains stay linear.
+  const inner = new Set();
+  walk(root, (n) => {
+    if (hit) return;
+    if (n.type === "StringLiteral") {
+      const value = stringValue(n.raw);
+      if (LOADER_TEXT.test(value)) hit = { name: /737472696e67$|HN0cmluZw/i.test(value) ? "loadstring" : "load", how: `the text '${value}'`, line: lineOf(n) };
+      else if (value.length <= 60 && value.includes("\\")) {
+        const bytes = value.replace(/\\(?:x([0-9a-fA-F]{2})|(\d{1,3}))/g, (_, h, d) => String.fromCharCode(h ? parseInt(h, 16) : Number(d)));
+        if (LOADERS.has(bytes)) hit = { name: bytes, how: "escaped bytes", line: lineOf(n) };
+      }
+      return;
+    }
+    if (n.type === "BinaryExpression" && n.operator === "..") {
+      for (const side of [n.left, n.right]) if (side.type === "BinaryExpression") inner.add(side);
+      if (inner.has(n)) return;
+      const value = folded(n);
+      if (value && LOADERS.has(value)) hit = { name: value, how: "a concatenation", line: lineOf(n) };
+      return;
+    }
+    if (n.type === "CallExpression") {
+      const value = folded(n);
+      if (value && LOADERS.has(value)) hit = { name: value, how: calleeOf(n) === "string.char" ? "string.char bytes" : "a decoded literal", line: lineOf(n) };
+    }
+  });
+  return hit;
+}
 
 /** Text decoded at runtime: string.char, decoder functions or literals written as escaped bytes. */
 function hidden(e) {
@@ -134,6 +188,8 @@ const CREDENTIALS = [
   ["a Discord webhook URL", /discord(?:app)?\.com\/api\/webhooks\/\d{15,20}\/[\w-]{30,}/],
   ["a Cfx license key", /\bcfxk_[A-Za-z0-9]{20,}/],
   ["a GitHub token", /\bgh[pousr]_[A-Za-z0-9]{36}\b/],
+  // In a Web API URL, or assigned to a steam…key name (Lua, JSON, `set steam_webApiKey "…"` in a shipped server.cfg).
+  ["a Steam Web API key", /api\.steampowered\.com\/[^\s'"]*[?&]key=[0-9A-F]{32}(?![0-9A-F])|\bsteam_?(?:web_?)?(?:api_?)?key['"]?\s*[=:]?\s*['"][0-9A-F]{32}['"]/i],
 ];
 
 function shippedCredentials(path, source) {
@@ -147,7 +203,7 @@ function shippedCredentials(path, source) {
 // iocs 2026.08.07): C2 hosts, operator handles and keys, txAdmin tampering markers. Exact strings only; left out as too
 // common: "ggWP" alone, decompressFromUTF16 (lz-string), the dropper file names (main.js, index.js, …).
 const BLUM_HOSTS =
-  "0xchitado.com 2312321321321213.com 2nit32.com 2ns3.net 5mscripts.net 9ns1.com bhlool.com blum-panel.com blum-panel.me bybonvieux.com cipher-panel.me ciphercheats.com dark-utilities.xyz fivemgtax.com fivems.lt flowleakz.org gfxpanel.org giithub.net iwantaticket.org jking.lt keyx.club kutingplays.com l00x.org monloox.com noanimeisgay.com ryenz.net spacedev.fr trezz.org useer.it.com warden-panel.me wsichkidolu.com z1lly.org";
+  "0xchitado.com 2312321321321213.com 2nit32.com 2ns3.net 5mscripts.net 9ns1.com bhlool.com blum-panel.com blum-panel.me bybonvieux.com cipher-panel.me ciphercheats.com dark-utilities.xyz fivemgtax.com fivems.lt flowleakz.org gfxpanel.org giithub.net iwantaticket.org jking.lt keyx.club kutingplays.com l00x.org mazaaa.fr monloox.com noanimeisgay.com ryenz.net spacedev.fr trezz.org useer.it.com warden-panel.me wsichkidolu.com xlthki.com z1lly.org";
 const BLUM = new RegExp(
   String.raw`(?<![\w-])(?:${BLUM_HOSTS.replaceAll(".", String.raw`\.`).replaceAll(" ", "|")})(?![\w-])|(?<![A-Za-z])[bB]ert[jJ][jJ]|miaus(?:s|as)|GlobalState\.ggWP|txadmin:js_create|\b(?:helpEmptyCode|onServerResourceFail|RESOURCE_EXCLUDE|isExcludedResource|JohnsUrUncle|installed_notices|VB8mdVjrzd|UARZT6|1470175544682217685|(?:anon|blum|city|dev|gang|mafia|null|panel|roleplay|zXeAH)JJ)\b`,
 );
@@ -169,19 +225,21 @@ function knownBackdoor(path, source) {
     const line = source.split("\n").findIndex((l) => l.length <= MANIFEST_LINE && (MANIFEST_DECOY.test(l) || MANIFEST_DOT.test(uncommented(l))));
     if (line >= 0) out.push(finding("LAB-SEC-112", "The manifest loads a JavaScript file from a hidden place (a dot file, node_modules/.…, or after a commented-out entry).", { path, line: line + 1 }));
   }
-  // Luraph's header is a comment, which the parser drops; the code below it can't be read by any static check.
-  const luraph = path.toLowerCase().endsWith(".lua") ? /Luraph Obfuscator/.exec(source) : null;
-  if (luraph) out.push(finding("LAB-SEC-103", "This file is obfuscated with Luraph.", at(luraph)));
+  // Luraph's and Boronide's headers are comments, which the parser drops; the code below them can't be read by any
+  // static check (a Boronide VM hid a licence kill switch with os.exit, catalogue 2026-11-20).
+  const vm = path.toLowerCase().endsWith(".lua") ? /Luraph Obfuscator|Boronide(?:™)? (?:Premium )?Obfuscation/.exec(source) : null;
+  if (vm) out.push(finding("LAB-SEC-103", `This file is obfuscated with ${vm[0].startsWith("Luraph") ? "Luraph" : "Boronide"}.`, at(vm)));
   return out;
 }
 
 /** A loader call and the arguments it gets, also through `pcall(load, code)` / `xpcall(load, handler, code)`. */
 function loadCall(call, name, loaders) {
   const args = argsOf(call);
-  if (name && loaders.has(name)) return { name, args };
+  // Also called straight through the global table: `_G.load(d)`, `_G[("6C6F6164"):fromhex()](d)`.
+  if ((name && loaders.has(name)) || isLoader(call.base, loaders)) return { name: name ?? "load", args };
   const skip = name === "pcall" ? 1 : name === "xpcall" ? 2 : 0;
   const fn = args[0];
-  return skip && fn?.type === "Identifier" && loaders.has(fn.name) ? { name: fn.name, args: args.slice(skip) } : null;
+  return skip && fn && isLoader(fn, loaders) ? { name: fn.type === "Identifier" ? fn.name : "load", args: args.slice(skip) } : null;
 }
 
 function luaRules(path, chunk) {
@@ -197,22 +255,32 @@ function luaRules(path, chunk) {
   });
 
   // Code loaded inside an HTTP response handler: `PerformHttpRequest(url, function(_, body) assert(load(body))() end)`.
-  for (const { call } of http)
+  for (const { call } of http) {
+    // The Blum family's loader URL ends in `/i?to=<key>` on whichever host it moved to (mazaaa.fr, xlthki.com, …).
+    let family = false;
+    const url = argsOf(call)[0];
+    if (url)
+      walk(url, (n) => {
+        if (n.type === "StringLiteral" && stringValue(n.raw).includes("/i?to=")) family = true;
+      });
     for (const fn of argsOf(call).filter((a) => a.type === "FunctionDeclaration"))
       for (const inner of calls(fn)) {
         const run = loadCall(inner.call, inner.name, loaders);
         if (run) {
           remote.add(inner.call);
           out.push(finding("LAB-SEC-101", `${run.name}() runs the body of an HTTP response: whoever controls that server can run any code on yours.`, { path, line: lineOf(inner.call) }));
+          if (family) out.push(finding("LAB-SEC-112", "Runs the reply of an '…/i?to=…' URL, the loader shape of the Blum Panel backdoor family.", { path, line: lineOf(call) }));
+          family = false;
         }
       }
+  }
 
   for (const { call, name } of list) {
-    if (!name) continue;
-    const args = argsOf(call);
     const run = loadCall(call, name, loaders);
     if (run && !remote.has(call) && run.args[0] && hidden(run.args[0]))
       out.push(finding("LAB-SEC-102", `${run.name}() runs text that is only decoded at runtime.`, { path, line: lineOf(call) }));
+    if (!name) continue;
+    const args = argsOf(call);
     if ((name === "GetConvar" || name === "GetConvarInt") && args[0]) {
       const convar = literal(args[0]);
       if (convar && (SECRET.test(convar) || (DB_SECRET.test(convar) && http.length > 0)))
@@ -262,6 +330,9 @@ function luaRules(path, chunk) {
       literal(target) !== null;
     if (!mine) out.push(finding("LAB-SEC-106", "SaveResourceFile writes into a resource that may not be this one.", { path, line: lineOf(call) }));
   }
+
+  const hiddenLoad = hiddenLoaderName(chunk);
+  if (hiddenLoad) out.push(finding("LAB-SEC-115", `The name of ${hiddenLoad.name}() is written in encoded form (${hiddenLoad.how}).`, { path, line: hiddenLoad.line }));
 
   // Obfuscated data and raw-IP addresses: one finding per file, at the first occurrence.
   const first = {};

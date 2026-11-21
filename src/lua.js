@@ -42,6 +42,8 @@ export function luaSpans(src) {
 const ATTRIB = /<\s*(?:const|close)\s*>/g;
 const COMPOUND = /(?:\/\/|<<|>>|\.\.|[-+*/%^&|])=(?!=)/g;
 const SAFE_NAV = /\?(?=[.[:])/g;
+// Table unpacking (`local title, duration in data`) is read as `= data`: the names are declared, the fields are not checked.
+const IN_UNPACK = /\blocal[ \t]+[A-Za-z_]\w*(?:[ \t]*,[ \t]*[A-Za-z_]\w*)*[ \t]+in\b/g;
 export const toPlainLua = (source) =>
   luaSpans(source)
     .map((s) =>
@@ -54,6 +56,7 @@ export const toPlainLua = (source) =>
             : s.text
                 .replace(ATTRIB, (m) => " ".repeat(m.length))
                 .replace(COMPOUND, (m) => `${" ".repeat(m.length - 1)}=`)
+                .replace(IN_UNPACK, (m) => `${m.slice(0, -2)}= `)
                 .replace(SAFE_NAV, " "),
     )
     .join("");

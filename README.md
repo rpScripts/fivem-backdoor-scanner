@@ -48,20 +48,21 @@ jobs:
 | LAB-SEC-107 | error | Code pushed out of view after 400+ spaces or tabs (the loader trick of a known backdoor family) |
 | LAB-SEC-101 | warning | `load()` / `loadstring()` on the body of an HTTP response |
 | LAB-SEC-102 | warning | `load()` on text decoded at runtime (`string.char`, escaped bytes, base64/hex decoders) |
-| LAB-SEC-103 | warning | Obfuscated data: long escaped-byte strings, 400+ character base64/hex, long `string.char` lists |
+| LAB-SEC-103 | warning | Obfuscated data: long escaped-byte strings, 400+ character base64/hex, long `string.char` lists, a Luraph or Boronide header |
 | LAB-SEC-104 | warning | Reads `sv_licenseKey`, `rcon_password`, `sv_tebexSecret`, or the MySQL string in a file that sends HTTP |
 | LAB-SEC-105 | warning | HTTP requests to a public raw IP or to an address decoded at runtime |
 | LAB-SEC-106 | warning | `os.execute`, `io.popen`, JavaScript `child_process`, writes outside the own resource, `SaveResourceFile` into other resources |
-| LAB-SEC-108 | warning | A real-shaped Discord bot token, Discord webhook, Cfx license key or GitHub token in the files |
+| LAB-SEC-108 | warning | A real-shaped Discord bot token, Discord webhook, Cfx license key, GitHub token or Steam Web API key in the files |
 | LAB-SEC-109 | warning | `ExecuteCommand("add_principal identifier.license:<hex> …")` or `add_ace identifier.…` with a hard-coded person (an admin planted in the file) |
 | LAB-SEC-110 | warning | `load()` / `loadstring()` on a parameter of an event handler: anyone who can trigger the event runs code |
 | LAB-SEC-111 | warning | JavaScript with `eval`, `new Function` or `vm.run*` in a file that also fetches (`fetch`, `http(s)`) or decodes (`atob`, base64, `fromCharCode`) text |
-| LAB-SEC-112 | warning | A string of the Blum / Warden / Cipher / GFX Panel backdoor (C2 hosts, operator keys, txAdmin tampering markers), or a manifest that loads a `.js` from a dot file or folder or after a commented-out entry |
+| LAB-SEC-112 | warning | A string of the Blum / Warden / Cipher / GFX Panel backdoor (C2 hosts, operator keys, txAdmin tampering markers), or a manifest that loads a `.js` from a dot file or folder or after a commented-out entry; also a `PerformHttpRequest` to an `…/i?to=…` URL whose reply runs through `load()` |
+| LAB-SEC-115 | error | The name `load` / `loadstring` written in encoded form: hex or base64 text, escaped bytes, `string.char`, `:fromhex()` or `"lo".."ad"` (how a licence loader hides the call that runs its server's answer) |
 | LAB-PKG-004 | warning | `.exe`, `.dll`, `.bat`, `.cmd`, `.ps1`, `.sh`, `.vbs`, `.jar`, `.scr` in a folder or archive (`.dll` is expected next to a `*.net.dll`, a C# resource) |
 | LAB-PKG-005 | warning | Archive entry with `..`, an absolute path or a drive letter: extracting it can write outside the target folder |
 
 Warnings are patterns, not proof: a webhook logger can legitimately call a raw IP. Read the reported line and decide.
-An error (LAB-SEC-107) means treat the package as compromised. Every finding carries `severity`, `confidence`,
+An error (LAB-SEC-107, LAB-SEC-115) means treat the package as compromised. Every finding carries `severity`, `confidence`,
 `method`, a fix text and references; the texts are in [`rules/catalog.json`](rules/catalog.json), versions in
 [`rules/CHANGELOG.md`](rules/CHANGELOG.md). Rule codes never change meaning.
 
