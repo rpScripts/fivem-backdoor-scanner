@@ -3,6 +3,10 @@
 Versions are `YYYY.MM.N`, the same as the ruleset of https://rpscripts.net/tools/fivem-backdoor-scanner/. A rule code
 never changes meaning.
 
+## 2026.11.12
+
+- No LAB-SEC or LAB-PKG rule changed. The web scanner's manifest check treats `if not lib or … then return end` before a `lib.*` call as a check for ox_lib; that is a resource check, which this scanner does not have.
+
 ## 2026.11.11
 
 - No LAB-SEC or LAB-PKG rule changed. The web scanner's framework API index knows ox_lib's `lib.name` and `lib.context`; that is a resource check, which this scanner does not have.
