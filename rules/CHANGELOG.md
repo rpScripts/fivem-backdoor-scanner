@@ -3,6 +3,10 @@
 Versions are `YYYY.MM.N`, the same as the ruleset of https://rpscripts.net/tools/fivem-backdoor-scanner/. A rule code
 never changes meaning.
 
+## 2026.11.10
+
+- No LAB-SEC or LAB-PKG rule changed. The web scanner's framework API check accepts calls into a resource a server pack ships when that copy defines the export or player method; that is a resource check, which this scanner does not have.
+
 ## 2026.11.9
 
 - No LAB-SEC or LAB-PKG rule changed. The web scanner's framework API check reads `local qbx = exports.qbx_core` then `qbx:GetPlayer()` as an export call, and code that checks `if lib and lib.x then` no longer needs `@ox_lib/init.lua`; both are resource checks, which this scanner does not have.
