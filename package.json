@@ -1,6 +1,6 @@
 {
   "name": "fivem-backdoor-scanner",
-  "version": "1.4.3",
+  "version": "1.4.4",
   "description": "Static scanner for FiveM resources: finds hidden loaders, remote code execution, obfuscated payloads, secret reads, leaked tokens and risky archive contents in Lua and JS files.",
   "type": "module",
   "bin": {
