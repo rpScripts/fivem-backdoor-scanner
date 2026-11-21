@@ -3,6 +3,10 @@
 Versions are `YYYY.MM.N`, the same as the ruleset of https://rpscripts.net/tools/fivem-backdoor-scanner/. A rule code
 never changes meaning.
 
+## 2026.11.8
+
+- No LAB-SEC or LAB-PKG rule changed. The web scanner no longer reports a manifest entry inside the output folder of a `webpack_config` as a missing file (FXServer builds it when the resource starts); that is a resource check, which this scanner does not have.
+
 ## 2026.11.7
 
 - CfxLua table unpacking (`local title, duration in data`) is read as `= data`, so the Lua checks run on such files instead of reporting them as not parsed.
