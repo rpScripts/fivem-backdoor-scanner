@@ -3,6 +3,10 @@
 Versions are `YYYY.MM.N`, the same as the ruleset of https://rpscripts.net/tools/fivem-backdoor-scanner/. A rule code
 never changes meaning.
 
+## 2026.11.15
+
+- No LAB-SEC or LAB-PKG rule changed. The web scanner's ox_lib manifest check no longer reads a legacy `__resource.lua` as code and accepts ox_lib's manual import `load(LoadResourceFile('ox_lib', 'init.lua'))`. This is a resource check, which this scanner does not have.
+
 ## 2026.11.14
 
 - No LAB-SEC or LAB-PKG rule changed. The web scanner now counts global functions a manifest loads from another resource of the same pack (`@res/file.lua`), leaves exports of a resource with obfuscated JavaScript undecided, reads a player from `<core>.Functions.GetPlayer` as a QBCore-style player whatever the variable is called, and accepts a field the code tests before using it. These are resource and pack checks, which this scanner does not have.

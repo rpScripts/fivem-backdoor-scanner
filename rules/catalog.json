@@ -1,5 +1,5 @@
 {
-  "rulesetVersion": "2026.11.14",
+  "rulesetVersion": "2026.11.15",
   "rules": {
     "LAB-SEC-101": {
       "severity": "warning",
