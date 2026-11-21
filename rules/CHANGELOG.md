@@ -3,6 +3,10 @@
 Versions are `YYYY.MM.N`, the same as the ruleset of https://rpscripts.net/tools/fivem-backdoor-scanner/. A rule code
 never changes meaning.
 
+## 2026.11.13
+
+- No LAB-SEC or LAB-PKG rule changed. The web scanner now reads bundled JavaScript that keeps `exports` in a variable (`var e = global.exports; e("name", …)`) as defining those exports, treats an export call inside a function passed straight to `pcall` as a caught probe, and treats a manifest that ships `-- '@ox_lib/init.lua'` commented out as optional ox_lib. These are resource checks, which this scanner does not have.
+
 ## 2026.11.12
 
 - No LAB-SEC or LAB-PKG rule changed. The web scanner's manifest check treats `if not lib or … then return end` before a `lib.*` call as a check for ox_lib; that is a resource check, which this scanner does not have.
